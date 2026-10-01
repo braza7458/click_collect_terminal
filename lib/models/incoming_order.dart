@@ -64,6 +64,8 @@ class IncomingOrder {
     this.fulfillmentDetail,
     this.customerPhone,
     this.appliedRewardLabel,
+    this.customerName,
+    this.pointsEarned = 0,
   });
 
   /// Identifiant du document Firestore — pour écrire les changements de statut.
@@ -89,6 +91,11 @@ class IncomingOrder {
   /// Récompense fidélité échangée pour cette commande ("Un dessert
   /// offert"…) : à préparer en plus, ce n'est pas une remise.
   final String? appliedRewardLabel;
+
+  /// Pseudo du compte fidélité (app ou borne), si le client en a un — le
+  /// même compte sur les 3 applications.
+  final String? customerName;
+  final int pointsEarned;
 
   int get itemCount => lines.fold(0, (sum, l) => sum + l.quantity);
 
@@ -120,6 +127,8 @@ class IncomingOrder {
       fulfillmentDetail: json['fulfillmentDetail'] as String?,
       customerPhone: json['customerPhone'] as String?,
       appliedRewardLabel: json['appliedRewardLabel'] as String?,
+      customerName: json['customerName'] as String?,
+      pointsEarned: (json['pointsEarned'] as num?)?.toInt() ?? 0,
     );
   }
 }

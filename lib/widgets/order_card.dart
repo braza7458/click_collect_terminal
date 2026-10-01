@@ -119,6 +119,15 @@ class OrderCard extends StatelessWidget {
                         '${order.modeLabel} · ${formatHourMinute(order.date)}',
                         style: textTheme.bodyMedium?.copyWith(color: AppColors.cream, fontWeight: FontWeight.w600),
                       ),
+                      if (order.customerName != null) ...[
+                        const SizedBox(height: 6),
+                        StatusPill(
+                          label: '${order.customerName} · fidélité'
+                              '${order.pointsEarned > 0 ? ' (+${order.pointsEarned} pts)' : ''}',
+                          color: AppColors.honey,
+                          icon: Icons.person_rounded,
+                        ),
+                      ],
                       if (order.fulfillmentDetail != null && order.fulfillmentDetail!.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(order.fulfillmentDetail!, style: textTheme.bodySmall),
