@@ -101,17 +101,25 @@ class OrderCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Flexible(
-                            child: Text(
-                              order.displayNumber,
-                              overflow: TextOverflow.ellipsis,
-                              style: (compact ? textTheme.titleLarge : textTheme.headlineSmall)?.copyWith(color: accent),
-                            ),
+                          // Le numéro ne rétrécit jamais (c'est ce que la
+                          // cuisine annonce) : ce sont les badges qui passent
+                          // à la ligne si la colonne est étroite.
+                          Text(
+                            order.displayNumber,
+                            style: (compact ? textTheme.titleLarge : textTheme.headlineSmall)?.copyWith(color: accent),
                           ),
                           const SizedBox(width: 10),
-                          SourceBadge(source: order.source),
-                          const Spacer(),
-                          if (now != null) ElapsedChip(since: order.date, now: now!),
+                          Expanded(
+                            child: Wrap(
+                              alignment: WrapAlignment.end,
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                SourceBadge(source: order.source),
+                                if (now != null) ElapsedChip(since: order.date, now: now!),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 6),

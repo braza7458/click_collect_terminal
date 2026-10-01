@@ -43,6 +43,12 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
   List<IncomingOrder> _orders = [];
   Set<String> _knownDocIds = {};
   bool _sawFirstSnapshot = false;
+
+  /// Ouverture de l'écran : seules les commandes passées APRÈS sonnent. Le
+  /// premier lot vient souvent du cache local, puis le serveur ajoute les
+  /// commandes manquées — sans ce filtre, ça déclenchait une fausse alarme
+  /// à chaque démarrage.
+  final DateTime _openedAt = DateTime.now();
   bool _alarmActive = false;
   bool _loading = true;
   String? _error;
@@ -82,7 +88,19 @@ class _ReceptionScreenState extends State<ReceptionScreen> {
     final ids = orders.map((o) => o.docId).toSet();
     if (_sawFirstSnapshot) {
       final arrived = ids.difference(_knownDocIds);
-      if (arrived.isNotEmpty) _onNewOrders();
+      // Pendant les 2 premières minutes (le temps que le serveur complète le
+      // cache), seules les commandes récentes sonnent ; ensuite TOUTE
+      // nouvelle commande sonne, même si l'horloge du téléphone du client
+      // est décalée.
+      final settling = DateTime.now().difference(_openedAt) < const Duration(minutes: 2);
+      final recent = _openedAt.subtract(const Duration(minutes: 10));
+      final reallyNew = orders.any(
+        (o) =>
+            arrived.contains(o.docId) &&
+            o.status == IncomingOrderStatus.confirmed &&
+            (!settling || o.date.isAfter(recent)),
+      );
+      if (reallyNew) _onNewOrders();
     }
     _sawFirstSnapshot = true;
     _knownDocIds = ids;

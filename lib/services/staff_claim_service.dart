@@ -20,12 +20,20 @@ const _claimedPrefsKey = 'staff_claim_granted_v1';
 class StaffClaimService {
   const StaffClaimService._();
 
-  static Future<void> ensureClaimed() async {
+  /// Renvoie true si le terminal a (ou vient d'obtenir) les droits staff.
+  static Future<bool> ensureClaimed() async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_claimedPrefsKey) == true) return;
+    if (prefs.getBool(_claimedPrefsKey) == true) return true;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    var user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      try {
+        user = (await FirebaseAuth.instance.signInAnonymously()).user;
+      } catch (_) {
+        return false;
+      }
+      if (user == null) return false;
+    }
 
     try {
       await FirebaseFunctions.instance
@@ -34,9 +42,11 @@ class StaffClaimService {
       // Custom claims only appear in a fresh ID token.
       await user.getIdToken(true);
       await prefs.setBool(_claimedPrefsKey, true);
+      return true;
     } catch (_) {
       // Offline on first launch, or the function isn't deployed yet — try
       // again next launch rather than blocking startup.
+      return false;
     }
   }
 }
