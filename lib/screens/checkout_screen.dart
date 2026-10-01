@@ -8,6 +8,7 @@ import '../data/kiosk_config.dart';
 import '../services/payment_intent_service.dart';
 import '../state/kiosk_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/ui.dart';
 import 'ticket_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -91,126 +92,172 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget build(BuildContext context) {
     final kioskState = KioskStateScope.of(context);
     final textTheme = Theme.of(context).textTheme;
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Récapitulatif')),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    final recap = GlassCard(
+      radius: AppRadius.xl,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: Eyebrow('Votre commande')),
+              StatusPill(label: kioskState.mode!.label, color: AppColors.orange, icon: kioskState.mode!.icon),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...kioskState.cart.map(
+            (line) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    constraints: const BoxConstraints(minWidth: 34),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.charcoalSoft,
-                      borderRadius: BorderRadius.circular(AppRadius.xl),
-                      border: Border.all(color: AppColors.divider),
+                      color: AppColors.orange.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
                     ),
+                    child: Text(
+                      '${line.quantity}×',
+                      textAlign: TextAlign.center,
+                      style: textTheme.labelLarge?.copyWith(color: AppColors.orange),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(kioskState.mode!.icon, color: AppColors.orange),
-                            const SizedBox(width: 10),
-                            Text(kioskState.mode!.label, style: textTheme.titleLarge),
-                          ],
+                        Text(
+                          line.sizeLabel != null ? '${line.itemName} · ${line.sizeLabel}' : line.itemName,
+                          style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        ...kioskState.cart.map(
-                          (line) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${line.quantity} ×', style: textTheme.bodyLarge?.copyWith(color: AppColors.creamMuted)),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        line.sizeLabel != null ? '${line.itemName} (${line.sizeLabel})' : line.itemName,
-                                        style: textTheme.bodyLarge,
-                                      ),
-                                      if (line.supplements.isNotEmpty)
-                                        Text(
-                                          '+ ${line.supplements.map((s) => s.name).join(', ')}',
-                                          style: textTheme.bodySmall,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                Text(formatPrice(line.lineTotal), style: textTheme.bodyLarge),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(child: Text('Total', style: textTheme.headlineSmall)),
-                            Text(formatPrice(kioskState.cartTotal), style: textTheme.headlineSmall?.copyWith(color: AppColors.orange)),
-                          ],
-                        ),
+                        if (line.supplements.isNotEmpty)
+                          Text('+ ${line.supplements.map((s) => s.name).join(', ')}', style: textTheme.bodySmall),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Text('Programme fidélité (facultatif)', style: textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Indiquez votre numéro de téléphone pour rattacher cette commande à votre compte fidélité.',
-                    style: textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    style: textTheme.bodyLarge?.copyWith(color: AppColors.cream),
-                    decoration: const InputDecoration(
-                      labelText: 'Numéro de téléphone',
-                      prefixIcon: Icon(Icons.phone_outlined),
+                  Text(formatPrice(line.lineTotal), style: textTheme.bodyLarge),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Divider(),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(child: Text('Total', style: textTheme.headlineSmall)),
+              Text(
+                formatPrice(kioskState.cartTotal),
+                style: textTheme.displaySmall?.copyWith(color: AppColors.orange),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final payment = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GlassCard(
+          radius: AppRadius.xl,
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const IconBadge(Icons.sms_rounded, color: AppColors.honey),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Prévenu par SMS (facultatif)', style: textTheme.titleMedium),
+                        Text('On vous envoie un SMS dès que votre commande est prête.', style: textTheme.bodySmall),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton.icon(
-                    onPressed: _submitting ? null : _payNow,
-                    icon: _submitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.charcoal),
-                          )
-                        : const Icon(Icons.lock_outline, size: 20),
-                    label: Text(_submitting ? 'Paiement en cours…' : 'Payer ${formatPrice(kioskState.cartTotal)}'),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Carte bancaire, Apple Pay ou Google Pay selon l\'appareil.',
-                    textAlign: TextAlign.center,
-                    style: textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton(
-                    onPressed: _submitting ? null : () => _finish(paid: false),
-                    child: const Text('Payer en caisse'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Retour à la carte'),
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                style: textTheme.titleLarge,
+                decoration: const InputDecoration(
+                  labelText: 'Numéro de téléphone',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 22),
+        GlowButton(
+          icon: Icons.contactless_rounded,
+          busy: _submitting,
+          label: 'Payer ${formatPrice(kioskState.cartTotal)}',
+          onPressed: _payNow,
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Carte bancaire, Apple Pay ou Google Pay selon l\'appareil.',
+          textAlign: TextAlign.center,
+          style: textTheme.bodySmall,
+        ),
+        const SizedBox(height: 18),
+        OutlinedButton.icon(
+          onPressed: _submitting ? null : () => _finish(paid: false),
+          icon: const Icon(Icons.point_of_sale_rounded),
+          label: const Text('Payer en caisse'),
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: () => Navigator.of(context).pop(),
+          style: TextButton.styleFrom(foregroundColor: AppColors.creamMuted),
+          icon: const Icon(Icons.arrow_back_rounded),
+          label: const Text('Retour à la carte'),
+        ),
+      ],
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Eyebrow('Étape 3 sur 3'),
+            Text('Récapitulatif', style: textTheme.headlineSmall),
+          ],
+        ),
+      ),
+      body: SafeArea(
+        top: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: wide ? 1200 : 680),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              child: wide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 6, child: FadeSlideIn(child: recap)),
+                        const SizedBox(width: 24),
+                        Expanded(flex: 5, child: FadeSlideIn(index: 1, child: payment)),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [recap, const SizedBox(height: 24), payment],
+                    ),
             ),
           ),
         ),

@@ -4,16 +4,17 @@ import 'kiosk_config.dart';
 import '../models/incoming_order.dart';
 import '../models/ticket.dart';
 
-/// Reads and writes the shared `orders` collection — the same one the
-/// mobile app writes to, so every order placed anywhere ends up in one
-/// place. Two directions:
-///  - [submitTicket]: this terminal, in Borne mode, writing its own
-///    self-service order (`source: 'kiosk'`).
-///  - [watchIncomingOrders] / [updateStatus]: this terminal, in Réception
-///    mode, reading orders placed through the app (`source: 'app'`) and
-///    advancing their status. Requires the terminal's anonymous session to
-///    hold the `staff` custom claim — see `staff_claim_service.dart` and
-///    `firestore.rules` in click_collect_app.
+/// Lit et écrit la collection partagée `orders` — celle où l'application
+/// mobile ET les bornes écrivent, pour que toutes les commandes arrivent au
+/// même endroit. Deux sens :
+///  - [submitTicket] : ce terminal en mode Borne enregistre sa propre
+///    commande libre-service (`source: 'kiosk'`, comme la borne
+///    click_collect_kiosk) ;
+///  - [watchIncomingOrders] / [updateStatus] / [fetchOrdersBetween] : ce
+///    terminal en mode Réception lit TOUTES les commandes (application +
+///    bornes) et fait avancer leur statut. Nécessite le claim `staff` sur la
+///    session anonyme du terminal — voir `staff_claim_service.dart` et
+///    `firestore.rules` dans click_collect_app.
 class OrdersRepository {
   const OrdersRepository._();
 
@@ -31,21 +32,48 @@ class OrdersRepository {
     return FirebaseFirestore.instance.collection('orders').add(data);
   }
 
-  /// Live feed of orders placed through the mobile app, most recent first —
-  /// covers active orders (confirmed/ready) as well as history (completed);
-  /// see [IncomingOrderStatus] and ReceptionScreen's three columns.
+  static List<IncomingOrder> _parse(QuerySnapshot<Map<String, dynamic>> snap) {
+    final orders = <IncomingOrder>[];
+    for (final d in snap.docs) {
+      try {
+        orders.add(IncomingOrder.fromFirestore(d.id, d.data()));
+      } catch (_) {
+        // Un document mal formé ne doit pas faire tomber tout l'écran.
+      }
+    }
+    return orders;
+  }
+
+  /// Flux en direct de toutes les commandes (application ET bornes), les
+  /// plus récentes d'abord — en cours (confirmed/ready) comme terminées.
+  ///
+  /// Avant : `where('source', isEqualTo: 'app')` — les commandes passées sur
+  /// la borne (`source: 'kiosk'`) n'apparaissaient jamais en réception.
+  /// Le tri sur `date` seul ne demande qu'un index simple (automatique).
   static Stream<List<IncomingOrder>> watchIncomingOrders() {
     return FirebaseFirestore.instance
         .collection('orders')
-        .where('source', isEqualTo: 'app')
         .orderBy('date', descending: true)
         .limit(300)
         .snapshots()
-        .map((snap) => snap.docs.map((d) => IncomingOrder.fromFirestore(d.id, d.data())).toList());
+        .map(_parse);
   }
 
-  /// Advances an app order's status. `firestore.rules` only allows this for
-  /// a claimed staff terminal, and only touches the `status` field.
+  /// Toutes les commandes entre [start] (inclus) et [end] (exclu), pour le
+  /// calendrier. `date` est une chaîne ISO-8601 : l'ordre alphabétique est
+  /// l'ordre chronologique, la comparaison de chaînes suffit.
+  static Future<List<IncomingOrder>> fetchOrdersBetween(DateTime start, DateTime end) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('orders')
+        .where('date', isGreaterThanOrEqualTo: start.toIso8601String())
+        .where('date', isLessThan: end.toIso8601String())
+        .orderBy('date')
+        .get();
+    return _parse(snap);
+  }
+
+  /// Fait avancer le statut d'une commande. `firestore.rules` ne l'autorise
+  /// qu'à un terminal "staff", et seulement sur le champ `status`.
   static Future<void> updateStatus(String docId, IncomingOrderStatus status) {
     return FirebaseFirestore.instance.collection('orders').doc(docId).update({'status': status.name});
   }

@@ -69,6 +69,11 @@ flutter:
 
   assets:
     - assets/images/logo.jpg
+    - assets/images/fond.jpg
+    - assets/images/fond_flou.jpg
+    - assets/images/tasty_cheddar.jpg
+    - assets/images/tajine.jpg
+    - assets/images/poulet.jpg
     - assets/audio/new_order_alert.wav
 
   # To add assets to your application, add an assets section, like this:

@@ -15,6 +15,7 @@ import 'state/terminal_mode.dart';
 import 'theme/app_theme.dart';
 import 'widgets/inactivity_guard.dart';
 import 'widgets/staff_exit_gate.dart';
+import 'widgets/ui.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -106,6 +107,7 @@ class _ClickCollectTerminalAppState extends State<ClickCollectTerminalApp> {
         title: 'Les Poulets de Mamie — Terminal',
         debugShowCheckedModeBanner: false,
         theme: buildKioskTheme(),
+        scrollBehavior: const KioskScrollBehavior(),
         home: home,
         builder: (context, child) {
           return StaffExitGate(
@@ -128,7 +130,7 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+      body: Center(child: BrandSeal(size: 140)),
     );
   }
 }

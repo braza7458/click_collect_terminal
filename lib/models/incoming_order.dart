@@ -1,7 +1,7 @@
 import 'cart_line.dart';
 
-/// The status progression for an order placed through the mobile app, as
-/// written by `click_collect_app`'s `Order.toJson()` and advanced from here.
+/// Où en est une commande — écrit par l'application mobile ou la borne
+/// (`status: 'confirmed'` à la création) et avancé depuis ce terminal.
 enum IncomingOrderStatus { confirmed, ready, completed, unknown }
 
 IncomingOrderStatus _parseStatus(String? raw) => switch (raw) {
@@ -11,83 +11,111 @@ IncomingOrderStatus _parseStatus(String? raw) => switch (raw) {
       _ => IncomingOrderStatus.unknown,
     };
 
-/// The app's own `OrderMode` has 3 values (click & collect / delivery /
-/// table service) — the terminal only needs to display the label, so it's
-/// read as free text rather than importing the app's enum.
-String _appModeLabel(String? raw) => switch (raw) {
+/// D'où vient la commande.
+enum OrderSource { app, kiosk }
+
+/// Libellé du mode, quelle que soit la source : l'application écrit
+/// clickCollect / delivery / tableService, la borne dineIn / takeaway.
+String _modeLabel(String? raw) => switch (raw) {
       'clickCollect' => 'Click & Collect',
       'delivery' => 'Livraison',
       'tableService' => 'Service à table',
+      'dineIn' => 'Sur place',
+      'takeaway' => 'À emporter',
       _ => raw ?? '',
     };
 
-/// One line of an incoming order, read back from Firestore. Shaped like the
-/// app's `CartLine.toJson()`, reusing the terminal's own [CartLine] model
-/// for display.
-CartLine _lineFromAppJson(Map<String, dynamic> json) => CartLine(
+/// Une ligne de commande relue depuis Firestore. Même forme pour l'app
+/// (`CartLine.toJson()`) et la borne (`Ticket.toJson()`).
+CartLine _lineFromJson(Map<String, dynamic> json) => CartLine(
       itemName: json['itemName'] as String? ?? json['name'] as String? ?? '?',
       sizeLabel: json['sizeLabel'] as String?,
       unitPrice: ((json['unitPrice'] ?? json['price']) as num?)?.toDouble() ?? 0,
-      quantity: json['quantity'] as int? ?? 1,
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
       supplements: ((json['supplements'] as List<dynamic>?) ?? [])
-          .map((s) => CartSupplement(
-                name: (s as Map<String, dynamic>)['name'] as String? ?? '',
-                price: (s['price'] as num?)?.toDouble() ?? 0,
-              ))
+          .map((s) {
+            final map = Map<String, dynamic>.from(s as Map);
+            return CartSupplement(
+              name: map['name'] as String? ?? '',
+              price: (map['price'] as num?)?.toDouble() ?? 0,
+            );
+          })
           .toList(),
     );
 
-/// An order placed through the mobile app, read live from the shared
-/// Firestore `orders` collection by the reception screen. Read-only except
-/// for [IncomingOrderStatus] — see `firestore.rules` in click_collect_app,
-/// which only lets a claimed staff terminal touch the `status` field.
+/// Une commande de la collection partagée `orders` — passée sur
+/// l'application mobile OU sur une borne — lue en direct par l'écran de
+/// réception. Lecture seule, sauf [IncomingOrderStatus] : `firestore.rules`
+/// (click_collect_app) ne laisse un terminal "staff" toucher qu'à `status`.
 class IncomingOrder {
   IncomingOrder({
     required this.docId,
     required this.orderId,
     required this.date,
+    required this.mode,
     required this.modeLabel,
     required this.lines,
     required this.total,
     required this.status,
     required this.paid,
+    required this.source,
+    this.ticketNumber,
     this.restaurantName,
     this.fulfillmentDetail,
     this.customerPhone,
     this.appliedRewardLabel,
   });
 
-  /// The Firestore document id — needed to write status updates back.
+  /// Identifiant du document Firestore — pour écrire les changements de statut.
   final String docId;
   final String orderId;
   final DateTime date;
+
+  /// Valeur brute du mode (clickCollect, dineIn…).
+  final String mode;
   final String modeLabel;
   final List<CartLine> lines;
   final double total;
   final IncomingOrderStatus status;
   final bool paid;
+  final OrderSource source;
+
+  /// Numéro de ticket de la borne (affiché au client sur son ticket).
+  final int? ticketNumber;
   final String? restaurantName;
   final String? fulfillmentDetail;
   final String? customerPhone;
 
-  /// Loyalty reward the customer redeemed for this order (e.g. "Un dessert
-  /// offert"), if any — a free add-on to prepare alongside the order, not a
-  /// discount already reflected in [total].
+  /// Récompense fidélité échangée pour cette commande ("Un dessert
+  /// offert"…) : à préparer en plus, ce n'est pas une remise.
   final String? appliedRewardLabel;
 
   int get itemCount => lines.fold(0, (sum, l) => sum + l.quantity);
 
+  /// Ce que l'équipe annonce au comptoir : "N° 12" pour la borne, "#K3F9…"
+  /// (fin de l'identifiant) pour l'application.
+  String get displayNumber {
+    if (ticketNumber != null) return 'N° $ticketNumber';
+    final id = orderId.replaceFirst('kiosk-', '');
+    return '#${id.length > 5 ? id.substring(id.length - 5) : id}';
+  }
+
   factory IncomingOrder.fromFirestore(String docId, Map<String, dynamic> json) {
     final rawLines = (json['lines'] as List<dynamic>?) ?? [];
+    final source = json['source'] == 'kiosk' ? OrderSource.kiosk : OrderSource.app;
+    final mode = json['mode'] as String? ?? '';
     return IncomingOrder(
       docId: docId,
       orderId: json['id'] as String? ?? docId,
       date: DateTime.tryParse(json['date'] as String? ?? '') ?? DateTime.now(),
-      modeLabel: _appModeLabel(json['mode'] as String?),
-      lines: rawLines.map((l) => _lineFromAppJson(l as Map<String, dynamic>)).toList(),
+      mode: mode,
+      modeLabel: _modeLabel(mode),
+      lines: rawLines.map((l) => _lineFromJson(Map<String, dynamic>.from(l as Map))).toList(),
       total: (json['total'] as num?)?.toDouble() ?? 0,
       status: _parseStatus(json['status'] as String?),
       paid: json['paid'] as bool? ?? false,
+      source: source,
+      ticketNumber: (json['number'] as num?)?.toInt(),
       restaurantName: json['restaurantName'] as String?,
       fulfillmentDetail: json['fulfillmentDetail'] as String?,
       customerPhone: json['customerPhone'] as String?,
